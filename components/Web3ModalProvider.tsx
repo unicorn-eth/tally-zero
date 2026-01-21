@@ -10,6 +10,8 @@ import { WagmiConfig, configureChains, createClient } from "wagmi";
 import { env } from "../env";
 
 import { chains } from "@config/chains";
+import { UnicornConnector } from "@lib/unicorn-connector";
+import { UnicornAutoConnect } from "./UnicornAutoConnect";
 
 export function Web3ModalProvider({ children }: { children: React.ReactNode }) {
   const projectId = env.NEXT_PUBLIC_WEB3STORAGE_PROJECT_ID;
@@ -18,9 +20,29 @@ export function Web3ModalProvider({ children }: { children: React.ReactNode }) {
   }
 
   const { provider } = configureChains(chains, [w3mProvider({ projectId })]);
+
+  // Build connectors array - always include Unicorn if env vars present
+  // (UnicornAutoConnect component handles the URL param detection)
+  const connectors = w3mConnectors({ projectId, chains });
+
+  if (
+    env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID &&
+    env.NEXT_PUBLIC_THIRDWEB_FACTORY_ADDRESS
+  ) {
+    const unicorn = new UnicornConnector({
+      chains,
+      options: {
+        clientId: env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID,
+        factoryAddress: env.NEXT_PUBLIC_THIRDWEB_FACTORY_ADDRESS,
+        defaultChain: 1, // Ethereum mainnet
+      },
+    });
+    connectors.push(unicorn as any);
+  }
+
   const wagmiClient = createClient({
     autoConnect: true,
-    connectors: w3mConnectors({ projectId, chains }),
+    connectors,
     provider,
   });
 
@@ -28,7 +50,10 @@ export function Web3ModalProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <WagmiConfig client={wagmiClient}>{children}</WagmiConfig>
+      <WagmiConfig client={wagmiClient}>
+        <UnicornAutoConnect />
+        {children}
+      </WagmiConfig>
       <Web3Modal projectId={projectId} ethereumClient={ethereumClient} />
     </>
   );
